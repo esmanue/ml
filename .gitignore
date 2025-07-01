@@ -1,0 +1,17 @@
+*.json
+*.csv
+
+
+D:/conda_envs/gensim_env/
+
+__pycache__/
+*.py[cod]
+*.pyo
+
+.venv/
+venv/
+env/
+myenv/
+
+.vscode/
+*.pkl

@@ -1,0 +1,269 @@
+import json
+import pandas as pd
+import re
+from sklearn.preprocessing import LabelEncoder
+from collections import defaultdict,Counter
+import matplotlib.pyplot as plt
+import csv
+
+id_to_muscle = {
+    "668ceb535e669a8d0a8ba653":"Chest",
+    "668ceb8e5e669a8d0a8ba654":"Back",
+    "668cebab5e669a8d0a8ba655":"Biceps",
+    "668cebc15e669a8d0a8ba656":"Triceps",
+    "668cebde5e669a8d0a8ba657":"Shoulder",
+    "668cebf25e669a8d0a8ba658":"Leg",
+    "668cec0f5e669a8d0a8ba659":"Core",
+    "668cec2d5e669a8d0a8ba65a":"Hip",
+    "668cec4a5e669a8d0a8ba65b":"Cardio",
+}
+id_to_movements = {
+ 
+"668d0224615579bd6d5f55c6":"BENCH PRESS",
+"669147c23339de992a27d323":"INCLINE DUMBBELL FLY",
+"669147cd3339de992a27d324":"INCLINE DUMBBELL BENCH PRESS",
+"6691488f3339de992a27d325":"DUMBBELL SHOULDER PRESS",
+"6691489a3339de992a27d326":"DUMBBELL LATERAL RAISE",
+"669148ac3339de992a27d327":"BARBELL FRONT RAISE",
+"669148fd3339de992a27d328":"INCLINE DUMBBELL CURL",
+"669149073339de992a27d329":"HAMMER CURL",
+"669149323339de992a27d32a":"LAT PULLDOWN",
+"6691493c3339de992a27d32b":"CLOSE GRIP PULLDOWN",
+"669149443339de992a27d32c":"SEATED CABLE ROW",
+"6691497b3339de992a27d32e":"PUSH DOWN",
+"6691498e3339de992a27d32f":"BENCH DIPS",
+"669149bf3339de992a27d330":"LEG EXTENSION",
+"669149c93339de992a27d331":"LEG CURL MACHINE",
+"669149d23339de992a27d332":"FREE SQUAT",
+"669149de3339de992a27d333":"SUMO SQUAT",
+"672d2cf76e6fccde132c3680":"BICYCLE",
+"674dadc18812e04dea4bf4e0":"CABLE CURL",
+"674dafa28812e04dea4bf4e6":"CHEST PRESS MACHINE",
+"674db00c8812e04dea4bf4e8":"SINGLE ARM DUMBBELL ROW",
+"674db05c8812e04dea4bf4ea":"STRAIGHT ARM PULLDOWN",
+"674db0a48812e04dea4bf4ec":"BARBELL ROW",
+"674db0f08812e04dea4bf4ee":"LEG PRESS",
+"674db1418812e04dea4bf4f0":"BULGARIAN SPLIT SQUAT",
+"674db20b8812e04dea4bf4f4":"CRUNCH",
+"674db25c8812e04dea4bf4f6":"BICYCLE CRUNCH",
+"674db2a38812e04dea4bf4f8":"LEG RAISES",
+"674db2e58812e04dea4bf4fa":"PLANK",
+"674db33f8812e04dea4bf4fc":"CABLE CRUNCH",
+"674db3948812e04dea4bf4fe":"DUMBBELL CHEST FLY",
+"674db3e58812e04dea4bf500":"DUMBBELL PULLOVER",
+"674db4228812e04dea4bf502":"PUSH UP",
+"674db46c8812e04dea4bf504":"BARBELL UPRIGHT ROW",
+"674db4c08812e04dea4bf506":"BARBELL STIFF-LEG DEADLIFT",
+"674db5288812e04dea4bf508":"DUMBBELL BENT OVER ROWS",
+"674db57b8812e04dea4bf50a":"DUMBBELL KICK BACK",
+"674db5e08812e04dea4bf50c":"HIP THRUST",
+"674db61a8812e04dea4bf50e":"WALKING LUNGE",
+"674db68e8812e04dea4bf510":"CLOSE GRIP PULLDOWN",
+"674db75c8812e04dea4bf512":"DUMBBELL STEP UP",
+"674db8c38812e04dea4bf514":"CABLE CROSSOVER",
+"674db9248812e04dea4bf516":"DUMBBELL SHRUG",
+"674db9b38812e04dea4bf518":"HIGH CABLE REAR DELT FLY",
+"674dba078812e04dea4bf51a":"BARBELL FRONT RAISE",
+"674dba8b8812e04dea4bf51c":"SMITH MACHINE SHOULDER PRESS",
+"674dbaf08812e04dea4bf51e":"WALL SIT",
+"674dbb358812e04dea4bf520":"BARBELL GOOD MORNING",
+"674dbb958812e04dea4bf522":"GLUTE BRIDGE",
+"674dbbe48812e04dea4bf524":"SEATED HIP ABDUCTION MACHINE",
+"674dbc2d8812e04dea4bf526":"DONKEY KICK",
+"67690f2c2f13db99a8f2b4e1":"DUMBBELL CHEST PRESS",
+"67690f8f2f13db99a8f2b4e2":"CHEST FLY MACHINE",
+"676949202f13db99a8f2b4ef":"REAR DELT FLY MACHINE",
+"67694a282f13db99a8f2b4f3":"DUMBBELL REAR DELT FLY",
+"67694acc2f13db99a8f2b4f5":"SHOULDER PRESS MACHINE",
+"67694b3d2f13db99a8f2b4f7":"BARBELL CURL",
+"67694bd82f13db99a8f2b4f9":"DUMBBELL CONCENTRATION CURL",
+"67694d3b2f13db99a8f2b4fc":"DUMBBELL OVERHEAD TRICEPS EXTANSION",
+"67694d6e2f13db99a8f2b4fd":"TRICEPS PUSHDOWN",
+"67694dda2f13db99a8f2b4fe":"ARNOLD PRESS",
+"6769591d2f13db99a8f2b503":"KETTLEBELL SWING",
+"676959fe2f13db99a8f2b506":"BARBELL GOOD MORNING",
+"67695a292f13db99a8f2b507":"GOBLET SQUAT",
+"67695aa82f13db99a8f2b50b":"BARBELL SQUAT",
+"67695ae12f13db99a8f2b50c":"ABDUCTOR MACHINE",
+"67695b342f13db99a8f2b50d":"MILITARY PRESS",
+"67695b842f13db99a8f2b50e":"DUMBBELL FRONT RAISE",
+"67695bc22f13db99a8f2b50f":"DUMBBELL SHRUG",
+"67695bfc2f13db99a8f2b510":"BARBELL SHRUG",
+"67695c6d2f13db99a8f2b513":"REVERSE GRIP PULLDOWN",
+"67695d002f13db99a8f2b515":"ROPE CURL",
+"6769613a2f13db99a8f2b51d":"DUMBBELL CHEST FLY",
+"6769628b2f13db99a8f2b51e":"INCLINE DUMBBELL PRESS",
+"678a0491d155f68421efbb92":"DUMBELL LEG CURL",
+"678a0590d155f68421efbb94":"FACEPULL",
+"678a0630d155f68421efbb95":"ALTERNATING DUMBELL CURL",
+"678a08a6d155f68421efbb9d":"DUMBELL STIFF-LEG DEADLIFT",
+"678a0967d155f68421efbb9e":"TREADMILL",
+"678a09b8d155f68421efbb9f":"STAIRMASTER",
+"678a0a0fd155f68421efbba0":"ELLIPTICAL",
+"6790ed36be021e3e8dd8b2c9":"CARDIO (KOŞU BANDI/BİSİKLET/ELLİPTİC)",
+"68190df37a3a7cf0910d5f13":"Rope Hammer Curl",
+"68190ed37a3a7cf0910d5f15":"BACK EXTENSİON",
+"68190f527a3a7cf0910d5f16":"STANDING CABLE KICKBACK",
+"6819103e7a3a7cf0910d5f19":"CABLE ROPE FRONT RAISE",
+"681910dd7a3a7cf0910d5f1a":"CABLE LATERAL RAISE",
+"681911677a3a7cf0910d5f1b":"LOW TO HIGH CABLE FLY",
+"681911c17a3a7cf0910d5f1c":"SEATED CALF RAISE",
+"681911e77a3a7cf0910d5f1d":"STANDING CALF RAISE",
+"681912c37a3a7cf0910d5f1e":"EZ BARBELL PREACHER CURL",
+"681913687a3a7cf0910d5f1f":"ROMANIAN DEADLIFT",
+"681913e67a3a7cf0910d5f20":"CHEST SUPPORTED INCLINE ROW",
+"681914b47a3a7cf0910d5f21":"BARBELL FRONT SQUAT",
+"681915937a3a7cf0910d5f22":"STATIC LUNGE",
+"681915d47a3a7cf0910d5f23":"REVERSE LUNGE",
+"681917527a3a7cf0910d5f25":"INCLINE REVERSE DUMBBELL FLY",
+"681918137a3a7cf0910d5f26":"DUMBBELL HEX PRESS",
+"681918747a3a7cf0910d5f27":"DUMBBELL HIP THRUST",
+"681918ed7a3a7cf0910d5f28":"LYING DUMBBELL LEG CURL",
+"681919d07a3a7cf0910d5f29":"DUMBBELL SKULL CRUSHER",
+"68191a757a3a7cf0910d5f2a":"SEATED BARBELL SHOULDER PRESS",
+"68191ad97a3a7cf0910d5f2b":"SEATED LATERAL RAISE",
+"68191b327a3a7cf0910d5f2c":"EZ BARBELL CURL",
+"68191bdd7a3a7cf0910d5f2d":"JUMP SQUAT",
+"68191cdc7a3a7cf0910d5f2e":"JUMPING JACK",
+"68191d477a3a7cf0910d5f2f":"DUMBBELL SIDE LUNGE",
+"68191de57a3a7cf0910d5f30":"BURPEES",
+"68191ebd7a3a7cf0910d5f31":"SUPERMAN",
+"68191fea7a3a7cf0910d5f32":"MOUNTAIN CLIMBERS",
+"681920737a3a7cf0910d5f33":"DUMBBELL THRUSTER",
+"681921797a3a7cf0910d5f34":"DUMBBELL PLANK PULL THROUGH",
+"6819220f7a3a7cf0910d5f35":"DEAD BUG EXERCISE",
+"681922657a3a7cf0910d5f36":"DIPS MACHINE",
+"681922bd7a3a7cf0910d5f37":"ROPE HAMMER CURL",
+"681923607a3a7cf0910d5f38":"PLANK GET UPS",
+"681923987a3a7cf0910d5f39":"HANGING LEG RAISE",
+"681923fd7a3a7cf0910d5f3a":"BANDED CLAMS",
+"681924417a3a7cf0910d5f3b":"SIDE LYING LEG RAISE",
+"681924857a3a7cf0910d5f3c":"STANDING KNEE RAISE",
+"681924cf7a3a7cf0910d5f3d":"SIDE LYING HIP RAISE",
+"681925157a3a7cf0910d5f3e":"FIRE HYDRANTS",
+"681925617a3a7cf0910d5f3f":"KNEE TUCK JUMP",
+"681925bb7a3a7cf0910d5f40":"DUMBBELL DECLINED BENCH PRESS",
+"6819263a7a3a7cf0910d5f41":"SEATED BEHIND THE NECK BARBELL SHOULDER PRESS",
+"684c1d507a3a7cf0910d7d3e":"DUMBBELL SIDE BEND",
+"684c1e4a7a3a7cf0910d7d3f":"DUMBBELL THRUSTER",
+
+}
+with open("memberQuestion.json", "r", encoding="utf-8") as f:
+    answer_data = json.load(f)
+
+with open("memberProgramCard.json", "r", encoding="utf-8") as f:
+    program_data = json.load(f)
+
+all_movements = [
+    "BENCH PRESS", "INCLINE DUMBBELL FLY", "INCLINE DUMBBELL BENCH PRESS", "DUMBBELL SHOULDER PRESS",
+    "DUMBBELL LATERAL RAISE", "BARBELL FRONT RAISE", "INCLINE DUMBBELL CURL", "HAMMER CURL",
+    "LAT PULLDOWN", "CLOSE GRIP PULLDOWN", "SEATED CABLE ROW", "PUSH DOWN", "BENCH DIPS",
+    "LEG EXTENSION", "LEG CURL MACHINE", "FREE SQUAT", "SUMO SQUAT", "BICYCLE", "CABLE CURL",
+    "CHEST PRESS MACHINE", "SINGLE ARM DUMBBELL ROW", "STRAIGHT ARM PULLDOWN", "BARBELL ROW",
+    "LEG PRESS", "BULGARIAN SPLIT SQUAT", "CRUNCH", "BICYCLE CRUNCH", "LEG RAISES", "PLANK",
+    "CABLE CRUNCH", "DUMBBELL CHEST FLY", "DUMBBELL PULLOVER", "PUSH UP", "BARBELL UPRIGHT ROW",
+    "BARBELL STIFF-LEG DEADLIFT", "DUMBBELL BENT OVER ROWS", "DUMBBELL KICK BACK", "HIP THRUST",
+    "WALKING LUNGE", "DUMBBELL STEP UP", "CABLE CROSSOVER", "DUMBBELL SHRUG", "HIGH CABLE REAR DELT FLY",
+    "SMITH MACHINE SHOULDER PRESS", "WALL SIT", "BARBELL GOOD MORNING", "GLUTE BRIDGE",
+    "SEATED HIP ABDUCTION MACHINE", "DONKEY KICK", "DUMBBELL CHEST PRESS", "CHEST FLY MACHINE",
+    "EAR DELT FLY MACHINE", "DUMBBELL REAR DELT FLY", "SHOULDER PRESS MACHINE", "BARBELL CURL",
+    "DUMBBELL CONCENTRATION CURL", "DUMBBELL OVERHEAD TRICEPS EXTANSION", "TRICEPS PUSHDOWN",
+    "ARNOLD PRESS", "KETTLEBELL SWING", "GOBLET SQUAT", "BARBELL SQUAT", "ABDUCTOR MACHINE",
+    "MILITARY PRESS", "DUMBBELL FRONT RAISE", "BARBELL SHRUG", "REVERSE GRIP PULLDOWN",
+    "ROPE CURL", "INCLINE DUMBBELL PRESS", "DUMBELL LEG CURL", "FACEPULL", "ALTERNATING DUMBELL CURL",
+    "DUMBELL STIFF-LEG DEADLIFT", "TREADMILL", "STAIRMASTER", "ELLIPTICAL", "CARDIO (KOŞU BANDI/BİSİKLET/ELLİPTİC)",
+    "Rope Hammer Curl", "BACK EXTENSİON", "STANDING CABLE KICKBACK", "CABLE ROPE FRONT RAISE",
+    "CABLE LATERAL RAISE", "LOW TO HIGH CABLE FLY", "SEATED CALF RAISE", "STANDING CALF RAISE",
+    "EZ BARBELL PREACHER CURL", "ROMANIAN DEADLIFT", "CHEST SUPPORTED INCLINE ROW",
+    "BARBELL FRONT SQUAT", "STATIC LUNGE", "REVERSE LUNGE", "INCLINE REVERSE DUMBBELL FLY",
+    "DUMBBELL HEX PRESS", "DUMBBELL HIP THRUST", "LYING DUMBBELL LEG CURL", "DUMBBELL SKULL CRUSHER",
+    "SEATED BARBELL SHOULDER PRESS", "SEATED LATERAL RAISE", "EZ BARBELL CURL", "JUMP SQUAT",
+    "JUMPING JACK", "DUMBBELL SIDE LUNGE", "BURPEES", "SUPERMAN", "MOUNTAIN CLIMBERS",
+    "DUMBBELL THRUSTER", "DUMBBELL PLANK PULL THROUGH", "DEAD BUG EXERCISE", "DIPS MACHINE",
+    "ROPE HAMMER CURL", "PLANK GET UPS", "HANGING LEG RAISE", "BANDED CLAMS", "SIDE LYING LEG RAISE",
+    "STANDING KNEE RAISE", "SIDE LYING HIP RAISE", "FIRE HYDRANTS", "KNEE TUCK JUMP",
+    "DUMBBELL DECLINED BENCH PRESS", "SEATED BEHIND THE NECK BARBELL SHOULDER PRESS",
+    "DUMBBELL SIDE BEND"
+]
+with open("memberProgramCard.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+user = {} 
+
+for id in data:
+    user_id = id.get("userId")
+    if not user_id: 
+        continue
+
+    for day in id.get("programs", []): #program has information in it
+        day_name = day.get("DailyProgramName", "Gün ?") 
+        muscle_counter = Counter() 
+        movements = defaultdict(Counter) #keeps value
+
+        for move in day.get("DailyMovements", []):
+            muscle_id = move.get("MuscleGroupId")
+            movement_id = move.get("MuscleMovementId")
+            if muscle_id and movement_id:
+                muscle_name = id_to_muscle.get(muscle_id, muscle_id)
+                movement_name = id_to_movements.get(movement_id, movement_id)
+                muscle_counter[muscle_name] += 1
+                movements[muscle_name][movement_name] += 1
+
+        sorted_muscles = sorted(muscle_counter.items(), key=lambda x: x[1], reverse=True)[:2]
+
+        if user_id not in user:
+            user[user_id] = {}
+
+        user[user_id][day_name] = {
+            "top_muscles": sorted_muscles,
+            "muscle_to_movements": {
+                muscle: movements[muscle]
+                for muscle, _ in sorted_muscles
+            }
+        }
+
+with open("top_muscles_and_movements.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow([
+        "User ID", "Day",
+        "Top Muscle 1", "Top Movement 1", "Count 1",
+        "Top Muscle 2", "Top Movement 2", "Count 2"
+    ])
+
+    for user_id, days in user.items():
+        for day_name, item in days.items():
+            row = [user_id, day_name]
+            for muscle, _ in item["top_muscles"]:
+                if item["muscle_to_movements"][muscle]:
+                    top_move, count = item["muscle_to_movements"][muscle].most_common(1)[0]
+                    row.extend([muscle, top_move, count])
+            while len(row) < 8:
+                row.extend(["", "", ""])
+            writer.writerow(row)
+
+day_muscle_counter = defaultdict(Counter)
+
+# Tüm kullanıcıların programlarını gün bazlı kas sayısı olarak topla
+for user in data:
+    for program in user.get("programs", []):
+        day_name = program.get("DailyProgramName", "Gün ?")
+        for move in program.get("DailyMovements", []):
+            muscle_id = move.get("MuscleGroupId")
+            if muscle_id:
+                muscle_name = id_to_muscle.get(muscle_id, f"Kas-{muscle_id}")
+                day_muscle_counter[day_name][muscle_name] += 1
+
+# Gün 1–5 arası için en çok tekrar eden 2 kası yaz
+with open("gunluk_en_populer_kaslar.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Gün", "Kas 1", "Sayı 1", "Kas 2", "Sayı 2"])
+
+    for i in range(1, 6):
+        day = f"Gün {i}"
+        top_2 = day_muscle_counter[day].most_common(2)
+        row = [day]
+        for muscle, count in top_2:
+            row.extend([muscle, count])
+        while len(row) < 5:
+            row.extend(["", ""])
+        writer.writerow(row)
