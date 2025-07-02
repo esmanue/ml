@@ -135,28 +135,43 @@ else:
     best_index = similarity_scores.idxmax()
     movement_text = data.loc[best_index, "movements"]
 
-if pd.notna(movement_text):
+if pd.notna(movement_text): #for not nan variables
     all_moves = movement_text.split(" | ")
-    selected_moves = [m for m in all_moves if any(m.startswith(muscle) for muscle in predicted_muscles)]
+    selected_moves = [m for m in all_moves if any(m.startswith(muscle) for muscle in predicted_muscles)] #seaech for muscle name
+
+    if not selected_moves:
+        print("No suitable movements found for predicted muscles.")
+        exit()
 
     plan = defaultdict(list)
     day_now = 1
+    move_count = 0
+    cardio = any(m.startswith("Cardio") for m in selected_moves)
+
+    total_moves = len(selected_moves)
+    moves_per_day = max(1, total_moves // day_result)  #if there is no cardio we look day_result
 
     for move in selected_moves:
         if day_now > day_result:
             break
         plan[day_now].append(move)
-        if move.startswith("Cardio"):
-            day_now += 1
 
-    print("\n Weekly Workout Plan:")
+        if cardio:
+            if move.startswith("Cardio"):
+                day_now += 1
+        else:
+            move_count += 1
+            if move_count % moves_per_day == 0:
+                day_now += 1
+
+    # weekly workout plan printer
+    print("\nWeekly Workout Plan:")
     for d in range(1, day_result + 1):
         print(f"\nDay {d}:")
         if plan[d]:
-            for i, move in enumerate(plan[d]):
-                dash = "-" 
-                print(f"{dash} {move}")
+            for move in plan[d]:
+                print(f"- {move}")
         else:
-            print("- Rest day or to be planned manually.")
+            print("Rest day or to be planned manually.")
 else:
-    print("\n No movement suggestions found.")
+    print("\nNo movement suggestions found.")
