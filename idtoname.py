@@ -5,6 +5,7 @@ from sklearn.preprocessing import LabelEncoder
 from collections import defaultdict,Counter
 import matplotlib.pyplot as plt
 import csv
+from itertools import combinations
 
 id_to_muscle = {
     "668ceb535e669a8d0a8ba653":"Chest",
@@ -185,85 +186,3 @@ all_movements = [
     "DUMBBELL DECLINED BENCH PRESS", "SEATED BEHIND THE NECK BARBELL SHOULDER PRESS",
     "DUMBBELL SIDE BEND"
 ]
-with open("memberProgramCard.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-user = {} 
-
-for id in data:
-    user_id = id.get("userId")
-    if not user_id: 
-        continue
-
-    for day in id.get("programs", []): #program has information in it
-        day_name = day.get("DailyProgramName", "Gün ?") 
-        muscle_counter = Counter() 
-        movements = defaultdict(Counter) #keeps value
-
-        for move in day.get("DailyMovements", []):
-            muscle_id = move.get("MuscleGroupId")
-            movement_id = move.get("MuscleMovementId")
-            if muscle_id and movement_id:
-                muscle_name = id_to_muscle.get(muscle_id, muscle_id)
-                movement_name = id_to_movements.get(movement_id, movement_id)
-                muscle_counter[muscle_name] += 1
-                movements[muscle_name][movement_name] += 1
-
-        sorted_muscles = sorted(muscle_counter.items(), key=lambda x: x[1], reverse=True)[:2]
-
-        if user_id not in user:
-            user[user_id] = {}
-
-        user[user_id][day_name] = {
-            "top_muscles": sorted_muscles,
-            "muscle_to_movements": {
-                muscle: movements[muscle]
-                for muscle, _ in sorted_muscles
-            }
-        }
-
-with open("top_muscles_and_movements.csv", "w", newline="", encoding="utf-8") as f:
-    writer = csv.writer(f)
-    writer.writerow([
-        "User ID", "Day",
-        "Top Muscle 1", "Top Movement 1", "Count 1",
-        "Top Muscle 2", "Top Movement 2", "Count 2"
-    ])
-
-    for user_id, days in user.items():
-        for day_name, item in days.items():
-            row = [user_id, day_name]
-            for muscle, _ in item["top_muscles"]:
-                if item["muscle_to_movements"][muscle]:
-                    top_move, count = item["muscle_to_movements"][muscle].most_common(1)[0]
-                    row.extend([muscle, top_move, count])
-            while len(row) < 8:
-                row.extend(["", "", ""])
-            writer.writerow(row)
-
-day_muscle_counter = defaultdict(Counter)
-
-# Tüm kullanıcıların programlarını gün bazlı kas sayısı olarak topla
-for user in data:
-    for program in user.get("programs", []):
-        day_name = program.get("DailyProgramName", "Gün ?")
-        for move in program.get("DailyMovements", []):
-            muscle_id = move.get("MuscleGroupId")
-            if muscle_id:
-                muscle_name = id_to_muscle.get(muscle_id, f"Kas-{muscle_id}")
-                day_muscle_counter[day_name][muscle_name] += 1
-
-# Gün 1–5 arası için en çok tekrar eden 2 kası yaz
-with open("gunluk_en_populer_kaslar.csv", "w", newline="", encoding="utf-8") as f:
-    writer = csv.writer(f)
-    writer.writerow(["Gün", "Kas 1", "Sayı 1", "Kas 2", "Sayı 2"])
-
-    for i in range(1, 6):
-        day = f"Gün {i}"
-        top_2 = day_muscle_counter[day].most_common(2)
-        row = [day]
-        for muscle, count in top_2:
-            row.extend([muscle, count])
-        while len(row) < 5:
-            row.extend(["", ""])
-        writer.writerow(row)

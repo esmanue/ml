@@ -1,15 +1,26 @@
-from rapidfuzz import fuzz
-import re
 import joblib
 import numpy as np
-from movements import movements_leg, movements_back,movements_chest, movements_core, movements_biceps,movements_cardio,movements_hip,movements_shoulder,movements_triceps
+import pandas as pd
 from collections import defaultdict
-import random
+from rapidfuzz import fuzz
+import re
+from movements import movements_leg, movements_back, movements_chest, movements_core, movements_biceps, movements_cardio, movements_hip, movements_shoulder, movements_triceps
 
-model = joblib.load("exercise_recommendation_model.pkl") # Load the trained model and column name
-valid_cols = joblib.load("exercise_columns.pkl")
+# Load models and columns
+day_model = joblib.load("day_prediction_model.pkl")
+day_features = joblib.load("day_model_columns.pkl")
 
-# movement-muscle converter 
+muscle_model = joblib.load("muscle_recommendation_model.pkl")
+muscle_list = joblib.load("muscle_columns.pkl")
+
+embedder = joblib.load("sentence_embed_model.pkl")
+kmeans_q11 = joblib.load("kmeans_q11.pkl")
+kmeans_q12 = joblib.load("kmeans_q12.pkl")
+
+data = pd.read_csv("unique_merged_final_dataset.csv")
+input_data = data[day_features]
+
+# Movement dictionary
 all_movement_lists = {
     "Biceps": movements_biceps,
     "Cardio": movements_cardio,
@@ -22,213 +33,130 @@ all_movement_lists = {
     "Back": movements_back,
 }
 
-movement_to_muscle = {} # create movement muscle dictionary
-for muscle, moves in all_movement_lists.items():
-    for item in moves: #search for move
-        name = item.split(":")[0].strip().upper()
-        movement_to_muscle[name] = muscle #match
-
-
+# Text preprocessing and classification helpers
 def normalize_text(text):
-    text = str(text).lower().strip() #lowercase, remove unnecessary spaces 
-    text = re.sub(r"[^\w\s]", "", text) #remove punctuation
-    return text
+    text = str(text).lower().strip()
+    return re.sub(r"[^\w\s]", "", text)
 
-
-def negativeorpositive(answer: str) -> int: # turning str to int
+def negativeorpositive(answer: str) -> int:
     answer = normalize_text(answer)
-
-    negative_words = [
-        "hayır", "yok", "sıkıntı yok", "problem yok", "hissetmiyorum", # If the answer matches negative words  return 0
-        "rahatsızlığım yok", "bilincimi kaybetmedim", "düşmedim", 
-        "baş dönmesi yok", "ilaç kullanmıyorum"
-    ]
-    for ref in negative_words:
+    negatives = ["hayır", "yok", "sıkıntı yok", "problem yok", "hissetmiyorum", "rahatsızlığım yok", "bilincimi kaybetmedim", "düşmedim", "baş dönmesi yok", "ilaç kullanmıyorum"]
+    for ref in negatives:
         if fuzz.partial_ratio(answer, ref) > 85:
             return 0
-
-   
-    risk_keywords = [
-        "evet", "hissediyorum", "rahatsızlığım", "doktor", "kalp",  # If it matches risk words  return 1
-        "göğüs", "ağrı", "bilincimi kaybettim", "ilaç", "düşüyorum"
-    ]
-    for word in risk_keywords:
+    risks = ["evet", "hissediyorum", "rahatsızlığım", "doktor", "kalp", "göğüs", "ağrı", "bilincimi kaybettim", "ilaç", "düşüyorum"]
+    for word in risks:
         if word in answer:
             return 1
-
     if len(answer) < 3 or answer in ["", "bilinmiyor", "emin değilim", "kararsızım"]:
         return 1
-
     return 1
 
-
 def sport_history(answer: str) -> int:
-    answer = str(answer).lower().strip()
-
+    answer = normalize_text(answer)
     negatives = ["hayır", "yapmadım", "yapmıyorum", "hiç", "yok", "olmadı"]
-    for neg in negatives:
-        if neg in answer:
-            return 0
-
-    if "evet" in answer:
-        return 1
-
-    if re.search(r"\d", answer): #for numbers
-        return 1
-
-    sports = [
-        "yüzme", "koşu", "fitness", "yoga", "pilates", "halter", "gym", 
-        "tesis", "vücut geliştirme", "bisiklet", "basketbol", "futbol", 
-        "voleybol", "tenis"
-    ]
-    for sport in sports:
-        if sport in answer:
-            return 1
-
+    if any(neg in answer for neg in negatives): return 0
+    if "evet" in answer or re.search(r"\d", answer): return 1
+    for sport in ["yüzme", "koşu", "fitness", "yoga", "pilates", "halter", "gym", "tesis", "vücut geliştirme", "bisiklet", "basketbol", "futbol", "voleybol", "tenis"]:
+        if sport in answer: return 1
     return 0
 
-
-def homeorsalon(answer: str) -> int: # Detect if training is at home
-    answer = str(answer).lower().strip()
-
-    not_home_keywords = ["evde yapmayacağım", "salonda", "spor salonu", "salon", "salonda yapıyorum", "dışarıda", "macfit"]
-    for phrase in not_home_keywords:
-        if phrase in answer:
-            return 0
-
-    if "evde" in answer or "ev ortamı" in answer or "evde yapacağım" in answer:
-        return 1
-
+def homeorsalon(answer: str) -> int:
+    answer = normalize_text(answer)
+    if any(kw in answer for kw in ["evde yapmayacağım", "salonda", "spor salonu", "salon", "salonda yapıyorum", "dışarıda", "macfit"]): return 0
+    if "evde" in answer or "ev ortamı" in answer: return 1
     return 0
 
 def gym_type(answer: str) -> int:
-    answer = str(answer).lower().strip()
-
-    if "macfit" in answer or "fitpoint" in answer or "kapsamlı" in answer: 
-        return 1
-
-    if "evde" in answer or "ev" in answer:
-        return 0
-
-    if "salon" in answer or "gym" in answer or "spor merkezi" in answer:
-        return 2
-
+    answer = normalize_text(answer)
+    if "macfit" in answer or "fitpoint" in answer or "kapsamlı" in answer: return 1
+    if "evde" in answer or "ev" in answer: return 0
+    if "salon" in answer or "gym" in answer or "spor merkezi" in answer: return 2
     return 0
 
-# for load we use joblib
-embedder = joblib.load("sentence_embed_model.pkl") # Load sentence embedding and clustering models 
-kmeans_q11 = joblib.load("kmeans_q11.pkl")
-kmeans_q12 = joblib.load("kmeans_q12.pkl")
-
-def cluster_from_text(text, embed_model, kmeans_model): #for q11 and q12 convert embedding and clustering
+def cluster_from_text(text, embed_model, kmeans_model):
     embedding = embed_model.encode([text])
-    cluster = kmeans_model.predict(embedding)[0]
-    return cluster
+    return kmeans_model.predict(embedding)[0]
 
 def map_cardio_answer_or_keep(answer):
-    answer_lower = str(answer).lower().strip()
+    answer = normalize_text(answer)
+    if any(kw in answer for kw in ["hayır", "yapamam", "zor", "zaman ayıramam", "ayıramam", "olumsuz"]): return 0
+    if any(kw in answer for kw in ["evet", "yapabilirim", "olumlu", "mümkün", "uygun"]): return 1
+    return 1
 
-    negatives = ["hayır", "yapamam", "zor", "zaman ayıramam", "ayıramam", "olumsuz"]
-    positives = ["evet", "yapabilirim", "olumlu", "mümkün", "uygun"]
-
-    for neg in negatives:
-        if neg in answer_lower:
-            return 0
-
-    for pos in positives:
-        if pos in answer_lower:
-            return 1
-
-    return 1  # Keep as-is if uncertain
-
-# Questions list
+# Questions
 questions = [
-    "1. Doktorunuz hiç kalp rahatsızlığınız olduğunu ve sadece bir doktor tarafından önerilen fiziksel aktiviteyi yapmanız gerektiğini söyledi mi?",
-    "2. Fiziksel aktiviteyi yaparken göğsünüzde ağrı hissediyor musunuz?",
-    "3. Son bir ay içerisinde fiziksel aktivite yapmadığınız halde göğüs ağrınız oldu mu?",
-    "4. Baş dönmesi sebebiyle dengenizi kaybediyor musunuz ya da hiç bilincinizi kaybediyor musunuz?",
-    "5. Doktorunuz şu anda kan basıncınız veya kalp rahatsızlığınız için ilaç kullanmanızı önerdi mi?",
-    "6. Fiziksel aktivite yapmamanız için başka bir neden biliyor musunuz?",
-    "7. Spor yapmanıza engel olacak doktor teşhisli bir rahatsızlığınız varsa, açıklayabilir misiniz?",
-    "8. Spor geçmişiniz var mı? Varsa, aktif olarak ne zamandır spor yapıyorsunuz?",
-    "9. Sporunuzu evinizde yapacaksanız, ekipmanlarınızla ilgili bilgi verebilir misiniz?",
-    "10. Spor salonunuz çok kapsamlı değilse, ekipman görsellerini paylaşabilir misiniz?",
-    "11. En son uyguladığınız antrenman planlamasını ve sıklığını belirtiniz: ",
-    "12. Son 3 antrenmanınızı hangi tarihlerde yaptınız?: ",
-    "13. Verilen kardiyo planlamasını, antrenmandan ayrı bir saatte gün içerisinde yapma şansınız var mı? Olumlu/olumsuz olarak belirtebilir misiniz?"
-    "14. Kaç günlük bir program istiyorsunuz"
+    "1. Baş dönmesi sebebiyle dengenizi kaybediyor musunuz ya da hiç bilincinizi kaybediyor musunuz?",  
+    "2. Doktorunuz hiç kalp rahatsızlığınız olduğunu ve sadece bir doktor tarafından önerilen fiziksel aktiviteyi yapmanız gerektiğini söyledi mi?",  
+    "3. Doktorunuz şu anda kan basıncınız veya kalp rahatsızlığınız için ilaç kullanmanızı önerdi mi?",  
+    "4. Fiziksel aktivite yapmamanız için başka bir neden biliyor musunuz?",                      
+    "5. Fiziksel aktiviteyi yaparken göğsünüzde ağrı hissediyor musunuz?",                        
+    "6. Son 3 antrenmanınızı hangi tarihlerde yaptınız?:",                                        
+    "7. Son bir ay içerisinde fiziksel aktivite yapmadığınız halde göğüs ağrınız oldu mu?",       
+    "8. Spor geçmişiniz var mı? Varsa, aktif olarak ne zamandır spor yapıyorsunuz?",              
+    "9. Spor salonunuz çok kapsamlı değilse, ekipman görsellerini paylaşabilir misiniz?",        
+    "10. Spor yapmanıza engel olacak doktor teşhisli bir rahatsızlığınız varsa, açıklayabilir misiniz?", 
+    "11. Sporunuzu evinizde yapacaksanız, ekipmanlarınızla ilgili bilgi verebilir misiniz?",      
+    "12. En son uyguladığınız antrenman planlamasını ve sıklığını belirtiniz:", 
+    "13. Verilen kardiyo planlamasını gün içinde yapma şansınız var mı?"
 ]
 
-# Prepare answers from user input
-answers_binary = []
-for q in questions[:7]:
-    cevap = input(q + " ")
-    binary = negativeorpositive(cevap)
-    answers_binary.append(binary)
+# User input → binary form
+answers_binary = [None] * 13
+answers_binary[0] = map_cardio_answer_or_keep(input(questions[12]))               
+answers_binary[1] = negativeorpositive(input(questions[1]))                        
+answers_binary[2] = negativeorpositive(input(questions[2]))                       
+answers_binary[3] = negativeorpositive(input(questions[3]))                        
+answers_binary[4] = negativeorpositive(input(questions[4]))                        
+answers_binary[5] = cluster_from_text(input(questions[5]), embedder, kmeans_q12)  
+answers_binary[6] = negativeorpositive(input(questions[6]))                        
+answers_binary[7] = sport_history(input(questions[7]))                             
+answers_binary[8] = gym_type(input(questions[8]))                                  
+answers_binary[9] = negativeorpositive(input(questions[9]))                        
+answers_binary[10] = homeorsalon(input(questions[10]))                             
+answers_binary[11] = cluster_from_text(input(questions[11]), embedder, kmeans_q11) 
+answers_binary[12] = 0 
 
-cevap8 = input(questions[7] + " ")
-answers_binary.append(sport_history(cevap8))
+# Prediction
+input_array = np.array(answers_binary).reshape(1, -1)
 
-cevap9 = input(questions[8] + " ")
-answers_binary.append(homeorsalon(cevap9))
+day_result = round(day_model.predict(input_array)[0])
+print(f"\n Predicted Workout Days: {day_result} days")
 
-cevap10 = input(questions[9] + " ")
-answers_binary.append(gym_type(cevap10))
+muscle_output = muscle_model.predict(input_array)
+predicted_muscles = [m for m, val in zip(muscle_list, muscle_output[0]) if val == 1]
 
-cevap11 = input(questions[10] + " ")
-answers_binary.append(cluster_from_text(cevap11, embedder, kmeans_q11))
+matched_row = data[(input_data == answers_binary).all(axis=1)]
 
-cevap12 = input(questions[11] + " ")
-answers_binary.append(cluster_from_text(cevap12, embedder, kmeans_q12))
+if not matched_row.empty:
+    movement_text = matched_row.iloc[0]["movements"]
+else:
+    similarity_scores = input_data.apply(lambda row: sum(row == answers_binary), axis=1)
+    best_index = similarity_scores.idxmax()
+    movement_text = data.loc[best_index, "movements"]
 
-cevap13 = input(questions[12] + " ")
-answers_binary.append(map_cardio_answer_or_keep(cevap13))
+if pd.notna(movement_text):
+    all_moves = movement_text.split(" | ")
+    selected_moves = [m for m in all_moves if any(m.startswith(muscle) for muscle in predicted_muscles)]
 
-cevap14 = input(questions[13]+" ")
+    plan = defaultdict(list)
+    day_now = 1
 
-# Convert to model input shape
-X_input = np.array(answers_binary).reshape(1, -1)
-prediction = model.predict(X_input)[0]
+    for move in selected_moves:
+        if day_now > day_result:
+            break
+        plan[day_now].append(move)
+        if move.startswith("Cardio"):
+            day_now += 1
 
-print(" binary vector:")
-print(prediction)
-
-# Show exercise names 
-recommended_exercises = [name for name, val in zip(valid_cols, prediction) if val == 1]
-
-print(" Recommended Exercises:")
-for move in recommended_exercises:
-    print("-", move)
-
-day_muscle_map = {
-    1: ["Chest", "Shoulder"],
-    2: ["Back", "Biceps"],
-    3: ["Leg", "Shoulder"],
-    4: ["Back","Core"],
-    5: ["Leg","Core"]
-}
-
-muscle_grouped = defaultdict(list) #default dict
-for move in recommended_exercises: 
-    key = move.strip().upper()
-    if key in movement_to_muscle: #search in dictionary 
-        muscle = movement_to_muscle[key] #match muscle-movement
-        for item in all_movement_lists[muscle]:
-            if item.startswith(key): # for set and reps
-                muscle_grouped[muscle].append(item)
-                break
-
-days = {1: defaultdict(list), 2: defaultdict(list), 3: defaultdict(list)}
-
-for day, muscles in day_muscle_map.items():
-    for muscle in muscles:
-        if muscle in muscle_grouped:
-            days[day][muscle].extend(muscle_grouped[muscle])
-
-
-for day in range(1, (int(cevap14)+1)):
-    print(f"\nGün {day} ")
-    for muscle, moves in days[day].items():
-        print(f" {muscle}:")
-        for move in moves:
-            print("-", move)
+    print("\n Weekly Workout Plan:")
+    for d in range(1, day_result + 1):
+        print(f"\nDay {d}:")
+        if plan[d]:
+            for i, move in enumerate(plan[d]):
+                dash = "-" 
+                print(f"{dash} {move}")
+        else:
+            print("- Rest day or to be planned manually.")
+else:
+    print("\n No movement suggestions found.")

@@ -1,29 +1,28 @@
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.multioutput import MultiOutputClassifier
-from sklearn.metrics import classification_report
+import numpy as np
 import joblib
+df = pd.read_csv("unique_merged_final_dataset.csv")
 
-df = pd.read_csv("datamerge_Updated_Final.csv")
+def extract_muscles(movement_str): #extracts unique muscle group names from the movement
+    if pd.isna(movement_str):
+        return []
+    return list(set([x.split(":")[0].strip() for x in movement_str.split(" | ") if ":" in x]))
 
-question_cols = df.columns[1:14]
-exercise_cols = df.columns[14:]
+df["muscle_labels"] = df["movements"].apply(extract_muscles)
 
-X = df[question_cols].apply(pd.to_numeric, errors="coerce").fillna(0).astype(int) #each text ignored
-Y = df[exercise_cols].apply(pd.to_numeric, errors="coerce").fillna(0).astype(int)
+X = df[[f"q{i}" for i in range(1, 14)]]
+y = df["muscle_labels"]
 
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+mlb = MultiLabelBinarizer() # Encode the multi-label targets into binary format
+y_encoded = mlb.fit_transform(y)
 
-valid_cols = [col for col in y_train.columns if y_train[col].nunique() > 1]
-y_train = y_train[valid_cols]
-y_test = y_test[valid_cols]
 
-model = MultiOutputClassifier(LogisticRegression(max_iter=1000))
+X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42) # Split into training and testing sets
+model = RandomForestClassifier(n_estimators=200, random_state=42)
 model.fit(X_train, y_train)
 
-y_pred = model.predict(X_test)
-print(classification_report(y_test, y_pred, target_names=valid_cols))
-
-joblib.dump(model, "exercise_recommendation_model.pkl")
-joblib.dump(valid_cols, "exercise_columns.pkl")
+joblib.dump(model, "muscle_recommendation_model.pkl")
+joblib.dump(mlb.classes_, "muscle_columns.pkl")

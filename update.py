@@ -1,52 +1,27 @@
-import json
-import csv
-from collections import Counter
-import re
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
 
-muscle_id_to_name = {
-    "668ceb535e669a8d0a8ba653": "Back",
-    "668ceb8e5e669a8d0a8ba654": "Chest",
-    "668cebab5e669a8d0a8ba655": "Leg",
-    "668cebc15e669a8d0a8ba656": "Shoulder",
-    "668cebde5e669a8d0a8ba657": "Triceps",
-    "668cebf25e669a8d0a8ba658": "Biceps",
-    "668cec0f5e669a8d0a8ba659": "Core",
-    "668cec4a5e669a8d0a8ba65b": "Cardio"
-}
+df = pd.read_csv("merged_muscle_freq.csv")
 
-with open("memberProgramCard.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
+X = df[[f"q{i}" for i in range(1, 14)]]
+y = df[["Chest", "Back", "Shoulder", "Core", "Cardio", "Biceps", "Triceps", "Leg", "Hip"]]
 
-rows = []
-muscle_group = list(muscle_id_to_name.values())
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
 
-for entry in data:
-    user_id = entry.get("userId")
+model = MultiOutputRegressor(RandomForestRegressor(n_estimators=100, random_state=42))
+model.fit(X_train, y_train)
 
-    for day in entry.get("programs", []):
-        day_name = day.get("DailyProgramName", "Gün ?")
-        match = re.search(r"\d+", day_name)
-        day_number = int(match.group()) if match else 0  
-        counter = Counter()
+y_pred = model.predict(X_test)
 
-        for move in day.get("DailyMovements", []):
-            muscle_id = move.get("MuscleGroupId")
-            muscle_name = muscle_id_to_name.get(muscle_id)
-            if muscle_name:
-                counter[muscle_name] += 1
+mae = mean_absolute_error(y_test, y_pred)
+print(f"📊 Ortalama MAE: {mae:.2f}")
 
-        row = [user_id, day_number]
-        for muscle in muscle_group:
-            row.append(counter.get(muscle, 0))
-        rows.append(row)
+new_user = [[0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1]]
+kas_tahmini = model.predict(new_user)[0]
 
-
-header = ["user_id", "day"] + muscle_group
-
-
-with open("musclesnumber.csv", "w", newline="", encoding="utf-8") as f:
-    writer = csv.writer(f)
-    writer.writerow(header)
-    writer.writerows(rows)
-
-print("musclesnumber.csv başarıyla oluşturuldu.")
+kas_gruplari = ["Chest", "Back", "Shoulder", "Core", "Cardio", "Biceps", "Triceps", "Leg", "Hip"]
+for kas, adet in zip(kas_gruplari, kas_tahmini):
+    print(f"{kas}: {round(adet)} hareket")
