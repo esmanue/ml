@@ -17,7 +17,7 @@ model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
 mae = mean_absolute_error(y_test, y_pred)
-print(f"📊 Ortalama MAE: {mae:.2f}")
+print(f" Ortalama MAE: {mae:.2f}")
 
 new_user = [[0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 1]]
 kas_tahmini = model.predict(new_user)[0]

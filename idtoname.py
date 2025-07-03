@@ -152,8 +152,7 @@ id_to_movements = {
 with open("memberQuestion.json", "r", encoding="utf-8") as f:
     answer_data = json.load(f)
 
-with open("memberProgramCard.json", "r", encoding="utf-8") as f:
-    program_data = json.load(f)
+
 
 all_movements = [
     "BENCH PRESS", "INCLINE DUMBBELL FLY", "INCLINE DUMBBELL BENCH PRESS", "DUMBBELL SHOULDER PRESS",
@@ -186,3 +185,29 @@ all_movements = [
     "DUMBBELL DECLINED BENCH PRESS", "SEATED BEHIND THE NECK BARBELL SHOULDER PRESS",
     "DUMBBELL SIDE BEND"
 ]
+
+with open("memberProgramCard.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+result = []
+
+for entry in data: 
+    user_id = entry["userId"]
+    programs = entry["programs"]
+
+    movement_entries = []
+    for program in programs:
+        for move in program["DailyMovements"]:
+            group_id = move["MuscleGroupId"]
+            movement_id = move["MuscleMovementId"]
+            sets = move["NumberOfSets"]
+            reps = "Max" if move["IsMax"] else move["NumberOfReps"]
+            group_name = id_to_muscle.get(group_id, "Unknown")
+            move_name = id_to_movements.get(movement_id, movement_id)
+            movement_entries.append(f"{group_name}:{move_name}:{sets}:{reps}")
+
+    movements_string = " | ".join(movement_entries)
+    result.append({"userId": user_id, "program": movements_string})
+
+df = pd.DataFrame(result)
+df.to_csv("user_programs.csv", index=False, encoding="utf-8-sig")

@@ -5,9 +5,9 @@ from sklearn.metrics import mean_absolute_error, r2_score
 import joblib
 
 
-df = pd.read_csv("unique_merged_final_dataset.csv")  
+df = pd.read_csv("updated_unique_merged_final_dataset.csv")  
 
-X = df[[f"q{i}" for i in range(1, 14)]]
+X = df.drop(columns=["total_days", "movements", "userId"]) 
 y = df["total_days"]
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42

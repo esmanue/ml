@@ -3,25 +3,25 @@ import random
 import numpy as np
 import pandas as pd
 import joblib
-from movements import movements_cardio  # Cardio listesini getiriyoruz
+from movements import movements_cardio  
 
-# Load models and columns
-day_model = joblib.load("day_prediction_model.pkl")
+
+day_model = joblib.load("day_prediction_model.pkl")# Load models and columns
 day_features = joblib.load("day_model_columns.pkl")
 
 muscle_model = joblib.load("muscle_recommendation_model.pkl")
 muscle_list = joblib.load("muscle_columns.pkl")
 
-# Load dataset and prepare input
+# Load dataset 
 data = pd.read_csv("unique_merged_final_dataset.csv")
 input_data = data[day_features]
 
-# Example user input (replace with real input later)
-user_input = [0,0,1,0,0,1,1,0,0,2,1,3,1]
+
+user_input = [0,0,1,0,0,1,1,0,0,2,1,3,1]# Example user input 
 input_array = np.array(user_input).reshape(1, -1)
 
-# Predict number of workout days
-day_result = int(round(day_model.predict(input_array)[0]))
+
+day_result = int(round(day_model.predict(input_array)[0]))# Predict number of workout days
 day_result = max(1, day_result)  
 print(f"\nPredicted Workout Days: {day_result} days")
 
